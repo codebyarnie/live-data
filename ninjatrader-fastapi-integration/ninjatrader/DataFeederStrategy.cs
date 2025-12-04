@@ -33,6 +33,8 @@ namespace NinjaTrader.NinjaScript.Strategies
         private int updateInterval = 1; // seconds between updates
         private DateTime lastUpdateTime;
         private SemaphoreSlim httpSemaphore = new SemaphoreSlim(1, 1);
+        private int barCount = 0;
+        private int dataSentCount = 0;
 
         protected override void OnStateChange()
         {
@@ -56,16 +58,52 @@ namespace NinjaTrader.NinjaScript.Strategies
                 StopTargetHandling = StopTargetHandling.PerEntryExecution;
                 BarsRequiredToTrade = 1;
                 IsInstantiatedOnEachOptimizationIteration = true;
+
+                // Print to confirm strategy is loaded
+                Print("DataFeederStrategy: SetDefaults completed");
             }
             else if (State == State.Configure)
             {
+                Print("DataFeederStrategy: Configuring...");
                 // Initialize HTTP client
                 httpClient = new HttpClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(5);
                 lastUpdateTime = DateTime.MinValue;
+                Print("DataFeederStrategy: Configuration completed");
+            }
+            else if (State == State.DataLoaded)
+            {
+                Print("=========================================");
+                Print("DataFeederStrategy: STARTED");
+                Print($"Instrument: {Instrument.FullName}");
+                Print($"API Endpoint: {apiEndpoint}");
+                Print($"Update Interval: {updateInterval} seconds");
+                Print("Waiting for bars to load...");
+                Print("=========================================");
+            }
+            else if (State == State.Historical)
+            {
+                Print("DataFeederStrategy: Processing historical data...");
+            }
+            else if (State == State.Transition)
+            {
+                Print("DataFeederStrategy: Transitioning to real-time...");
+            }
+            else if (State == State.Realtime)
+            {
+                Print("=========================================");
+                Print("DataFeederStrategy: NOW IN REAL-TIME MODE");
+                Print("Data will be sent to FastAPI backend");
+                Print("=========================================");
             }
             else if (State == State.Terminated)
             {
+                Print("=========================================");
+                Print($"DataFeederStrategy: TERMINATED");
+                Print($"Total bars processed: {barCount}");
+                Print($"Total data sent: {dataSentCount}");
+                Print("=========================================");
+
                 // Clean up HTTP client
                 if (httpClient != null)
                 {
@@ -82,7 +120,24 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnBarUpdate()
         {
+            // Count bars for debugging
+            barCount++;
+
+            // Print first few bars to confirm strategy is running
+            if (barCount <= 3)
+            {
+                Print($"Bar {barCount}: Time={Time[0]}, Close={Close[0]}, State={State}");
+            }
+
             if (CurrentBar < BarsRequiredToTrade)
+            {
+                if (barCount <= 3)
+                    Print($"Waiting for more bars (Current: {CurrentBar}, Required: {BarsRequiredToTrade})");
+                return;
+            }
+
+            // Only send data in real-time mode
+            if (State != State.Realtime)
                 return;
 
             // Check if enough time has passed since last update
@@ -90,6 +145,12 @@ namespace NinjaTrader.NinjaScript.Strategies
                 return;
 
             lastUpdateTime = DateTime.Now;
+
+            // Print every 10th data send attempt for debugging
+            if (dataSentCount % 10 == 0)
+            {
+                Print($"Attempting to send data #{dataSentCount + 1}...");
+            }
 
             // Send data asynchronously without blocking the strategy
             Task.Run(async () => await SendDataToAPI());
@@ -99,7 +160,10 @@ namespace NinjaTrader.NinjaScript.Strategies
         {
             // Use semaphore to prevent multiple simultaneous requests
             if (!await httpSemaphore.WaitAsync(0))
+            {
+                Print("Previous request still in progress, skipping...");
                 return;
+            }
 
             try
             {
@@ -125,18 +189,32 @@ namespace NinjaTrader.NinjaScript.Strategies
                 // Send POST request
                 var response = await httpClient.PostAsync(apiEndpoint, content);
 
+                dataSentCount++;
+
                 if (response.IsSuccessStatusCode)
                 {
-                    Print($"Data sent successfully for {Instrument.FullName} at {Time[0]}");
+                    if (dataSentCount <= 3 || dataSentCount % 10 == 0)
+                    {
+                        Print($"✓ Data #{dataSentCount} sent successfully: {Instrument.FullName} @ {Close[0]}");
+                    }
                 }
                 else
                 {
-                    Print($"Failed to send data. Status: {response.StatusCode}");
+                    Print($"✗ Failed to send data #{dataSentCount}. HTTP Status: {response.StatusCode}");
                 }
+            }
+            catch (HttpRequestException ex)
+            {
+                Print($"✗ HTTP Error: {ex.Message}");
+                Print("  → Is the FastAPI server running on " + apiEndpoint + "?");
+            }
+            catch (TaskCanceledException ex)
+            {
+                Print($"✗ Request timeout: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Print($"Error sending data to API: {ex.Message}");
+                Print($"✗ Error sending data to API: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
