@@ -16,25 +16,45 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnStateChange()
         {
+            Print($"[SimpleTestStrategy] OnStateChange called - State: {State}");
+
             if (State == State.SetDefaults)
             {
                 Description = @"Simple test strategy to verify NinjaTrader is working";
                 Name = "SimpleTestStrategy";
                 Calculate = Calculate.OnBarClose;
-                BarsRequiredToTrade = 1;
+                BarsRequiredToTrade = 0;  // Changed to 0 to process all bars
+                IsInstantiatedOnEachOptimizationIteration = true;
 
                 Print("========================================");
                 Print("SimpleTestStrategy: LOADED SUCCESSFULLY");
                 Print("========================================");
             }
+            else if (State == State.Configure)
+            {
+                Print("SimpleTestStrategy: State.Configure - Configuring strategy");
+            }
             else if (State == State.DataLoaded)
             {
-                Print("SimpleTestStrategy: Data loaded, ready to start");
+                Print("========================================");
+                Print("SimpleTestStrategy: State.DataLoaded");
+                Print($"  Chart Instrument: {Instrument?.FullName ?? "NULL"}");
+                Print($"  Bar Period: {BarsPeriod?.BarsPeriodType.ToString() ?? "NULL"}");
+                Print($"  Current Bars: {CurrentBar}");
+                Print("========================================");
+            }
+            else if (State == State.Historical)
+            {
+                Print("SimpleTestStrategy: State.Historical - Processing historical data");
+            }
+            else if (State == State.Transition)
+            {
+                Print("SimpleTestStrategy: State.Transition - Moving to real-time");
             }
             else if (State == State.Realtime)
             {
                 Print("========================================");
-                Print("SimpleTestStrategy: NOW RUNNING IN REAL-TIME");
+                Print("SimpleTestStrategy: State.Realtime - NOW RUNNING IN REAL-TIME");
                 Print($"Instrument: {Instrument.FullName}");
                 Print("You should see bar updates below...");
                 Print("========================================");
@@ -43,7 +63,13 @@ namespace NinjaTrader.NinjaScript.Strategies
             {
                 Print("========================================");
                 Print("SimpleTestStrategy: STOPPED");
-                Print($"Total bars processed: {barCounter}");
+                Print($"  Final State before termination: {State}");
+                Print($"  Total bars processed: {barCounter}");
+                Print($"  CurrentBar at termination: {CurrentBar}");
+                if (Instrument != null)
+                    Print($"  Instrument was: {Instrument.FullName}");
+                else
+                    Print("  ERROR: Instrument was NULL!");
                 Print("========================================");
             }
         }
@@ -52,22 +78,13 @@ namespace NinjaTrader.NinjaScript.Strategies
         {
             barCounter++;
 
-            // Print first 5 bars
-            if (barCounter <= 5)
-            {
-                Print($"Bar #{barCounter}: Time={Time[0]:MM/dd HH:mm:ss}, Close=${Close[0]}, Volume={Volume[0]}");
-            }
+            // Print EVERY bar for debugging
+            Print($"Bar #{barCounter}: CurrentBar={CurrentBar}, Time={Time[0]:MM/dd HH:mm:ss}, Close=${Close[0]:F2}, Volume={Volume[0]}, State={State}");
 
-            // Then print every 10th bar
-            if (barCounter > 5 && barCounter % 10 == 0)
+            // Additional info for first 3 bars
+            if (barCounter <= 3)
             {
-                Print($"Bar #{barCounter}: Still running... Close=${Close[0]}");
-            }
-
-            // Print when in real-time mode
-            if (State == State.Realtime && barCounter <= 3)
-            {
-                Print($"  → REAL-TIME BAR #{barCounter}");
+                Print($"  → Bar Index: {CurrentBar}, BarsArray Count: {BarsArray[0].Count}");
             }
         }
     }
