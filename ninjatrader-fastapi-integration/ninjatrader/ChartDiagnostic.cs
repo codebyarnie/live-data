@@ -56,15 +56,15 @@ namespace NinjaTrader.NinjaScript.Indicators
             {
                 Print("================================================");
                 Print("ChartDiagnostic: DataLoaded state");
-                Print($"  Instrument: {Instrument?.FullName ?? "NULL"}");
-                Print($"  Master Instrument: {Instrument?.MasterInstrument?.Name ?? "NULL"}");
-                Print($"  BarsPeriod Type: {BarsPeriod?.BarsPeriodType ?? 0}");
-                Print($"  BarsPeriod Value: {BarsPeriod?.Value ?? 0}");
-                Print($"  BarsArray Length: {BarsArray?.Length ?? 0}");
+                Print($"  Instrument: {(Instrument != null ? Instrument.FullName : "NULL")}");
+                Print($"  Master Instrument: {(Instrument?.MasterInstrument != null ? Instrument.MasterInstrument.Name : "NULL")}");
+                Print($"  BarsPeriod Type: {(BarsPeriod != null ? BarsPeriod.BarsPeriodType.ToString() : "NULL")}");
+                Print($"  BarsPeriod Value: {(BarsPeriod != null ? BarsPeriod.Value.ToString() : "NULL")}");
+                Print($"  BarsArray Length: {(BarsArray != null ? BarsArray.Length.ToString() : "NULL")}");
                 if (BarsArray != null && BarsArray.Length > 0)
                 {
-                    Print($"  Bars Count: {BarsArray[0]?.Count ?? 0}");
-                    Print($"  Bars IsValidDataPoint: {BarsArray[0]?.IsValidDataPoint ?? false}");
+                    Print($"  Bars Count: {(BarsArray[0] != null ? BarsArray[0].Count.ToString() : "NULL")}");
+                    Print($"  Bars IsValidDataPoint: {(BarsArray[0] != null ? BarsArray[0].IsValidDataPoint.ToString() : "NULL")}");
                 }
                 Print($"  CurrentBar: {CurrentBar}");
                 Print($"  Calculate: {Calculate}");
