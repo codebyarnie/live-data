@@ -42,25 +42,38 @@ namespace NinjaTrader.NinjaScript.Strategies
             {
                 Description = @"Sends market data to FastAPI backend";
                 Name = "DataFeederStrategy";
-                Calculate = Calculate.OnEachTick;
+
+                // Use OnBarClose instead of OnEachTick for better compatibility
+                // OnEachTick can be changed later once you verify it works
+                Calculate = Calculate.OnBarClose;
+
+                // Minimal strategy settings for data-only usage (no trading)
+                BarsRequiredToTrade = 0;
+                IsInstantiatedOnEachOptimizationIteration = true;
+
+                // These are left as defaults but not required for data feeding
                 EntriesPerDirection = 1;
                 EntryHandling = EntryHandling.AllEntries;
-                IsExitOnSessionCloseStrategy = true;
-                ExitOnSessionCloseSeconds = 30;
                 IsFillLimitOnTouch = false;
                 MaximumBarsLookBack = MaximumBarsLookBack.TwoHundredFiftySix;
                 OrderFillResolution = OrderFillResolution.Standard;
                 Slippage = 0;
-                StartBehavior = StartBehavior.WaitUntilFlat;
                 TimeInForce = TimeInForce.Gtc;
                 TraceOrders = false;
                 RealtimeErrorHandling = RealtimeErrorHandling.StopCancelClose;
                 StopTargetHandling = StopTargetHandling.PerEntryExecution;
-                BarsRequiredToTrade = 1;
-                IsInstantiatedOnEachOptimizationIteration = true;
+
+                // Removed these to avoid requiring brokerage connection:
+                // StartBehavior = StartBehavior.WaitUntilFlat;
+                // IsExitOnSessionCloseStrategy = true;
+                // ExitOnSessionCloseSeconds = 30;
 
                 // Print to confirm strategy is loaded
+                Print("========================================");
                 Print("DataFeederStrategy: SetDefaults completed");
+                Print("  Using Calculate.OnBarClose for compatibility");
+                Print("  (Change to OnEachTick in code if you need tick data)");
+                Print("========================================");
             }
             else if (State == State.Configure)
             {
@@ -126,19 +139,16 @@ namespace NinjaTrader.NinjaScript.Strategies
             // Print first few bars to confirm strategy is running
             if (barCount <= 3)
             {
-                Print($"Bar {barCount}: Time={Time[0]}, Close={Close[0]}, State={State}");
+                Print($"Bar {barCount}: CurrentBar={CurrentBar}, Time={Time[0]}, Close={Close[0]}, State={State}");
             }
 
-            if (CurrentBar < BarsRequiredToTrade)
+            // Only send data in real-time mode (skip historical processing)
+            if (State != State.Realtime)
             {
                 if (barCount <= 3)
-                    Print($"Waiting for more bars (Current: {CurrentBar}, Required: {BarsRequiredToTrade})");
+                    Print($"  → Skipping (not in Realtime yet)");
                 return;
             }
-
-            // Only send data in real-time mode
-            if (State != State.Realtime)
-                return;
 
             // Check if enough time has passed since last update
             if ((DateTime.Now - lastUpdateTime).TotalSeconds < updateInterval)
