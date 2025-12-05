@@ -1,0 +1,536 @@
+1. Core Concept
+
+The system is a Directed Acyclic Graph (DAG) of nodes.
+Each node represents an indicator or strategy component.
+Nodes may depend on:
+
+Tick events
+
+Candle events for any timeframe
+
+Outputs from other indicators (any TF)
+
+Mixed inputs (ticks + candles + other indicators)
+
+When an event arrives (tick or candle), the system:
+
+Determines which nodes are affected.
+
+Computes each node once, in topological order.
+
+Emits outputs (indicator values, strategy signals).
+
+This approach guarantees deterministic, non-duplicated, race-free execution.
+
+2. Node Model (Indicator Definition)
+
+Each indicator is defined as:
+
+id: string
+inputs: List[InputRef]       # tick | candle(TF) | indicator(id)
+compute(state, inputs) -> output
+output_schema: arbitrary
+state: persistent state object
+
+
+Where InputRef can be:
+
+Tick
+Candle(TF)
+Indicator(ID)
+
+
+This allows arbitrary fan-in, cross-TF, and cross-indicator dependencies.
+
+3. Global DAG and Coordinator
+
+The coordinator holds:
+
+Node registry (id → node)
+
+Dependency graph (edges between nodes)
+
+Reverse dependency graph (for impact propagation)
+
+Topological order (pre-computed at startup)
+
+Execution engine (runs nodes in correct order)
+
+Event router (determines which nodes to recompute)
+
+No indicator consumes external events directly.
+Only the coordinator interacts with NATS or other brokers.
+
+4. Event Flow
+Step 1 — Event arrives
+
+Example: Candle(5m)
+
+Step 2 — Mark impacted nodes
+
+Using the reverse dependency graph:
+
+impacted = all nodes that depend directly or transitively on Candle(5m)
+
+Step 3 — Sort by DAG order
+
+The coordinator filters the precomputed topological order:
+
+exec_order = [node for node in topo_order if node in impacted]
+
+Step 4 — Compute nodes
+
+Each node:
+
+Fetches the latest values from its inputs
+
+Calls its compute()
+
+Updates its state
+
+Stores its output in the shared result store
+
+Each node is executed exactly once per event, even if multiple parents updated.
+
+5. Multi-Timeframe Handling
+
+Define candle streams:
+
+Candle(1m)
+Candle(5m)
+Candle(15m)
+Candle(30m)
+...
+
+
+Aggregation chain (1m → 5m → 15m → etc.) is either:
+
+done externally before reaching the DAG, or
+
+modeled as nodes inside the DAG.
+
+Indicators simply declare:
+
+dependencies on the TFs they use
+
+dependencies on other indicators (regardless of TF)
+
+This generalizes naturally with DAG semantics.
+
+6. Cross-Indicator Dependencies (Explicit)
+
+If Indicator B depends on Indicator A:
+
+inputs: [
+    Indicator("A"),
+    Candle("5m")
+]
+
+
+The DAG ensures:
+
+Indicator A is computed before Indicator B
+
+Indicator B triggers when A changes
+
+No recomputation storms occur
+
+Example:
+
+A → B → D
+ \
+  \→ C → D
+
+
+All valid and automatically resolved.
+
+7. State Management
+
+Each node holds its own state:
+
+rolling windows
+
+indicator buffers
+
+internal counters
+
+multi-TF caches
+
+cooldown logic
+
+smoothing filters
+
+This state is passed into compute() and updated in place.
+
+No global mutable state exists.
+
+8. Integration with NATS or Other Brokers
+
+Coordinator acts as the boundary:
+
+Inbound:
+
+Ticks
+
+Candle(1m), Candle(5m), …
+
+Outbound:
+
+Indicator updates → indicators.<id>
+
+Strategy outputs → strategy.signals.<symbol>
+
+Dashboard events → dashboard.stream.<channel>
+
+Indicators themselves do not subscribe directly to NATS.
+
+9. Correctness Guarantees
+
+The system ensures:
+
+Deterministic execution order
+
+Zero duplicated computations
+
+Zero race conditions
+
+Consistent multi-TF alignment
+
+Strict event coherence (no next tick until current DAG done)
+
+Safe fan-in and fan-out
+
+Arbitrary expansion/convergence patterns supported
+
+10. Step-by-Step Implementation Guide
+Step 1 — Define the Node Schema
+class Node:
+    id: str
+    inputs: List[InputRef]
+    state: dict
+    def compute(self, inputs, state) -> output: ...
+
+Step 2 — Declare Indicators
+
+Use a YAML/JSON or Python config:
+
+A:
+  inputs: [Tick, Candle(1m)]
+B:
+  inputs: [Indicator:A, Candle(5m)]
+C:
+  inputs: [Candle(1m), Candle(15m)]
+D:
+  inputs: [Indicator:B, Indicator:C]
+
+Step 3 — Build the DAG
+
+Register nodes
+
+Validate no cycles
+
+Build adjacency list and reverse edges
+
+Compute topological order
+
+Step 4 — Create Event Router
+
+For each event type, precompute which nodes depend on it.
+
+Step 5 — Implement Executor
+
+On event:
+
+Determine impacted nodes
+
+Determine execution order
+
+Fetch cached inputs
+
+Compute nodes
+
+Store outputs
+
+Publish results via NATS
+
+Step 6 — Add Persistence for Node State
+
+Use:
+
+in-memory for low latency
+
+snapshotting for recovery
+
+optional Redis/RocksDB buffer for replay/resilience
+
+Step 7 — Add Strategy Layer
+
+Strategies are simply nodes farther down in the DAG.
+
+Step 8 — Add Dashboard/WebSocket Layer
+
+A final DAG branch can publish aggregated indicator streams.
+
+
+Recommended repository strategy (mono-repo vs multi-repo)
+
+Recommended directory layout
+
+Deployment structure on K3s
+
+Scaling/operational implications
+
+1. Recommended Repository Strategy
+
+Use a hybrid monorepo, not many small repos.
+
+Why not many repos?
+
+If you split:
+
+indicators
+
+DAG engine
+
+NATS consumers
+
+strategies
+
+aggregator
+
+dashboard feed
+
+into separate repos, you will suffer from:
+
+versioning drift
+
+dependency mismatch
+
+complicated CI/CD
+
+difficult local development
+
+no global typing of indicator outputs
+
+This is a tight domain where all components must evolve together.
+You want atomic commits that update:
+
+engine + 5 indicators + 2 strategies
+in one change-set.
+
+Why not a giant monorepo with everything?
+
+You should separate things that:
+
+scale differently
+
+are owned by different teams
+
+change at different cadences
+
+run outside the trading engine core
+
+So: hybrid monorepo structure
+
+Use one repository for the entire trading engine, including:
+
+tick ingestion
+
+candle aggregation
+
+DAG compute engine
+
+indicators
+
+strategies
+
+NATS input/output adapters
+
+dashboard publishers
+
+But put infrastructure, ops tooling, dashboards, and monitoring in separate repos.
+
+2. Recommended Repo Layout (Monorepo)
+
+Below is a clean production-level layout.
+
+repo-root/
+│
+├── engine/                         # Core DAG compute engine
+│   ├── dag/
+│   ├── scheduler/
+│   ├── state/
+│   └── runtime/
+│
+├── indicators/                     # Each indicator is a node plugin
+│   ├── moving_average/
+│   ├── vwap/
+│   ├── imbalance/
+│   ├── footprint/
+│   └── ... (many)
+│
+├── strategies/                     # Strategy nodes living atop the DAG
+│   ├── breakout/
+│   ├── mean_reversion/
+│   └── liquidity_hunt/
+│
+├── dataflow/                       # Event producers & consumers
+│   ├── ingestion/                  # tick → NATS
+│   ├── candle_aggregation/         # 1m → 5m → ...
+│   ├── adapters/                   # NATS in/out, WebSockets, APIs
+│   └── publishers/
+│
+├── config/                         # Declarative DAG definitions
+│   ├── indicators.yaml
+│   ├── strategies.yaml
+│   └── pipelines/
+│       └── symbol_template.yaml
+│
+├── infra/                          # K3s deploy manifests (OPTIONAL)
+│   ├── helm/
+│   ├── k8s/
+│   └── kustomize/
+│
+├── tests/                          # Unit, integration, deterministic-replay
+│   ├── replay/
+│   ├── fuzz/
+│   └── e2e/
+│
+└── tools/                          # Developer CLI, utilities
+    └── dagviz/                     # Graph visualization tool
+
+Why this structure?
+
+Indicators and strategies are plugins inside the same repo.
+
+DAG engine is isolated and testable.
+
+Data ingestion/aggregation is modular.
+
+K3s manifests can live here OR in a separate “infra repo”.
+
+3. K3s Deployment Model
+
+You do not deploy every indicator as a microservice.
+You deploy per-symbol DAG executors or per-symbol groups.
+
+Typical deployment:
+Deployment: tick-collector
+Deployment: candle-aggregator
+Deployment: engine-executor (N replicas based on symbols)
+Deployment: dashboard-streamer
+StatefulSet: timeseries-db (optional)
+Service: nats
+
+Scaling pattern (very important)
+
+You scale by symbols, not components:
+
+engine-executor --symbol=ES
+engine-executor --symbol=NQ
+engine-executor --symbol=CL
+
+
+Each executor runs:
+
+the DAG engine
+
+all indicators
+
+all strategies
+for a given instrument.
+
+This keeps:
+
+state local
+
+latency minimal
+
+ordering strict
+
+no cross-node chatter
+
+no cross-service races
+
+This is exactly how HFT/prop desks structure computation.
+
+4. How Many Repos?
+Recommended split (3 repos total):
+
+Repo 1 — trading-engine (monorepo)
+Contains:
+
+ingestion
+
+aggregation
+
+DAG execution engine
+
+indicators
+
+strategies
+
+NATS adapters
+
+dashboard publishers
+
+This is your main repo — where your domain logic lives.
+
+Repo 2 — infra (K3s + CI/CD + Helm + observability)
+Contains:
+
+helm charts
+
+k8s manifests
+
+logging stack (Loki / Promtail)
+
+metrics (Prometheus + Grafana)
+
+deploying NATS / cert-manager / secrets
+
+Tekton/Argo workflows or GitHub Actions
+
+RBAC, network policies
+
+Reason:
+Infra evolves on a completely different cycle than indicators or strategies.
+
+Repo 3 — dashboard/UI
+Contains:
+
+WebSockets client
+
+UI for indicators, signals, performance
+
+React/Vue/Svelte code
+
+Grafana dashboards or custom dashboards
+
+Reason:
+Frontend/UI has separate dependencies and release cadence.
+
+5. Summary Table
+Component	Repo	Reason
+DAG Engine	trading-engine	Core, must version lock with indicators
+Indicators	trading-engine	Plugin-style, high coupling
+Strategies	trading-engine	Locked to engine version
+NATS interfaces	trading-engine	Directly tied to dataflow
+Candle aggregation	trading-engine	Shared types & state
+Tick ingestion	trading-engine	Shared types
+K3s Manifests	infra	DevOps lifecycle, separated
+Helm Charts	infra	Ops-managed
+Observability stack	infra	Ops-managed
+Dashboards/UI	dashboard	Independent lifecycle
+6. Optional Variation (If You Want Maximum Modularity)
+
+If you later grow into multiple teams, you can split indicators into a separate repo:
+
+Repo 4 — indicators-pack
+But only when you have:
+
+100+ indicator modules
+
+many different teams
+
+For now, keep them in the engine.
