@@ -143,7 +143,8 @@ namespace NinjaTrader.NinjaScript.Indicators
                 var data = new
                 {
                     symbol = Instrument.FullName,
-                    timestamp = Time[0].ToString("yyyy-MM-ddTHH:mm:ss"),
+                    timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"),  // ← Real-time
+                    bar_time = Time[0].ToString("yyyy-MM-ddTHH:mm:ss"),       // ← Bar reference (optional)
                     price = Close[0],
                     volume = Volume[0],
                     bid = GetCurrentBid(),
