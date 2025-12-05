@@ -1,32 +1,24 @@
 #region Using declarations
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Xml.Serialization;
 using NinjaTrader.Cbi;
-using NinjaTrader.Gui;
-using NinjaTrader.Gui.Chart;
-using NinjaTrader.Gui.SuperDom;
-using NinjaTrader.Gui.Tools;
 using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
-using NinjaTrader.Core.FloatingPoint;
-using NinjaTrader.NinjaScript.Indicators;
 using NinjaTrader.NinjaScript.DrawingTools;
+using NinjaTrader.Gui.Tools;
 using System.Net.Http;
 using System.Threading;
+using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
+using System.Windows.Media;
 #endregion
 
-namespace NinjaTrader.NinjaScript.Strategies
+namespace NinjaTrader.NinjaScript.Indicators
 {
-    public class DataFeederStrategy : Strategy
+    public class DataFeederIndicator : Indicator
     {
         private HttpClient httpClient;
         private string apiEndpoint = "http://localhost:8000/data";
@@ -38,86 +30,59 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnStateChange()
         {
+            Print($"[DataFeederIndicator] State: {State}");
+
             if (State == State.SetDefaults)
             {
-                Description = @"Sends market data to FastAPI backend";
-                Name = "DataFeederStrategy";
-
-                // Use OnBarClose instead of OnEachTick for better compatibility
-                // OnEachTick can be changed later once you verify it works
+                Description = @"Sends market data to FastAPI backend (INDICATOR VERSION)";
+                Name = "DataFeederIndicator";
                 Calculate = Calculate.OnBarClose;
+                IsOverlay = true;
+                DisplayInDataBox = false;
+                DrawOnPricePanel = true;
+                PaintPriceMarkers = false;
+                IsSuspendedWhileInactive = true;
 
-                // Minimal strategy settings for data-only usage (no trading)
-                BarsRequiredToTrade = 0;
-                IsInstantiatedOnEachOptimizationIteration = true;
-
-                // These are left as defaults but not required for data feeding
-                EntriesPerDirection = 1;
-                EntryHandling = EntryHandling.AllEntries;
-                IsFillLimitOnTouch = false;
-                MaximumBarsLookBack = MaximumBarsLookBack.TwoHundredFiftySix;
-                OrderFillResolution = OrderFillResolution.Standard;
-                Slippage = 0;
-                TimeInForce = TimeInForce.Gtc;
-                TraceOrders = false;
-                RealtimeErrorHandling = RealtimeErrorHandling.StopCancelClose;
-                StopTargetHandling = StopTargetHandling.PerEntryExecution;
-
-                // Removed these to avoid requiring brokerage connection:
-                // StartBehavior = StartBehavior.WaitUntilFlat;
-                // IsExitOnSessionCloseStrategy = true;
-                // ExitOnSessionCloseSeconds = 30;
-
-                // Print to confirm strategy is loaded
                 Print("========================================");
-                Print("DataFeederStrategy: SetDefaults completed");
-                Print("  Using Calculate.OnBarClose for compatibility");
-                Print("  (Change to OnEachTick in code if you need tick data)");
+                Print("DataFeederIndicator: LOADED");
                 Print("========================================");
             }
             else if (State == State.Configure)
             {
-                Print("DataFeederStrategy: Configuring...");
-                // Initialize HTTP client
+                Print("DataFeederIndicator: Configuring...");
                 httpClient = new HttpClient();
                 httpClient.Timeout = TimeSpan.FromSeconds(5);
                 lastUpdateTime = DateTime.MinValue;
-                Print("DataFeederStrategy: Configuration completed");
             }
             else if (State == State.DataLoaded)
             {
                 Print("=========================================");
-                Print("DataFeederStrategy: STARTED");
-                Print($"Instrument: {Instrument.FullName}");
-                Print($"API Endpoint: {apiEndpoint}");
-                Print($"Update Interval: {updateInterval} seconds");
-                Print("Waiting for bars to load...");
+                Print("DataFeederIndicator: DATA LOADED ✓");
+                Print($"  Instrument: {Instrument.FullName}");
+                Print($"  API Endpoint: {apiEndpoint}");
+                Print($"  Update Interval: {updateInterval} seconds");
+                Print($"  Bars available: {BarsArray[0].Count}");
                 Print("=========================================");
             }
             else if (State == State.Historical)
             {
-                Print("DataFeederStrategy: Processing historical data...");
-            }
-            else if (State == State.Transition)
-            {
-                Print("DataFeederStrategy: Transitioning to real-time...");
+                Print("DataFeederIndicator: Processing historical data...");
             }
             else if (State == State.Realtime)
             {
                 Print("=========================================");
-                Print("DataFeederStrategy: NOW IN REAL-TIME MODE");
-                Print("Data will be sent to FastAPI backend");
+                Print("DataFeederIndicator: NOW LIVE! ✓✓✓");
+                Print("  Sending data to FastAPI backend...");
                 Print("=========================================");
             }
             else if (State == State.Terminated)
             {
                 Print("=========================================");
-                Print($"DataFeederStrategy: TERMINATED");
-                Print($"Total bars processed: {barCount}");
-                Print($"Total data sent: {dataSentCount}");
+                Print($"DataFeederIndicator: STOPPED");
+                Print($"  Total bars: {barCount}");
+                Print($"  Data sent: {dataSentCount}");
                 Print("=========================================");
 
-                // Clean up HTTP client
                 if (httpClient != null)
                 {
                     httpClient.Dispose();
@@ -133,51 +98,48 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnBarUpdate()
         {
-            // Count bars for debugging
             barCount++;
 
-            // Print first few bars to confirm strategy is running
+            // Print first few bars to confirm it's working
             if (barCount <= 3)
             {
-                Print($"Bar {barCount}: CurrentBar={CurrentBar}, Time={Time[0]}, Close={Close[0]}, State={State}");
+                Print($"Bar #{barCount}: CurrentBar={CurrentBar}, Time={Time[0]:MM/dd HH:mm:ss}, Close=${Close[0]:F2}, State={State}");
             }
 
-            // Only send data in real-time mode (skip historical processing)
+            // Only send data in real-time mode
             if (State != State.Realtime)
             {
                 if (barCount <= 3)
-                    Print($"  → Skipping (not in Realtime yet)");
+                    Print($"  → Skipping (State={State})");
                 return;
             }
 
-            // Check if enough time has passed since last update
+            // Check if enough time has passed
             if ((DateTime.Now - lastUpdateTime).TotalSeconds < updateInterval)
                 return;
 
             lastUpdateTime = DateTime.Now;
 
-            // Print every 10th data send attempt for debugging
+            // Log every 10th send for debugging
             if (dataSentCount % 10 == 0)
             {
-                Print($"Attempting to send data #{dataSentCount + 1}...");
+                Print($"Sending data #{dataSentCount + 1}...");
             }
 
-            // Send data asynchronously without blocking the strategy
+            // Send data asynchronously
             Task.Run(async () => await SendDataToAPI());
         }
 
         private async Task SendDataToAPI()
         {
-            // Use semaphore to prevent multiple simultaneous requests
             if (!await httpSemaphore.WaitAsync(0))
             {
-                Print("Previous request still in progress, skipping...");
+                Print("Previous request in progress, skipping...");
                 return;
             }
 
             try
             {
-                // Prepare the data payload
                 var data = new
                 {
                     symbol = Instrument.FullName,
@@ -192,11 +154,9 @@ namespace NinjaTrader.NinjaScript.Strategies
                     close = Close[0]
                 };
 
-                // Convert to JSON
                 string jsonContent = Newtonsoft.Json.JsonConvert.SerializeObject(data);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-                // Send POST request
                 var response = await httpClient.PostAsync(apiEndpoint, content);
 
                 dataSentCount++;
@@ -205,7 +165,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 {
                     if (dataSentCount <= 3 || dataSentCount % 10 == 0)
                     {
-                        Print($"✓ Data #{dataSentCount} sent successfully: {Instrument.FullName} @ {Close[0]}");
+                        Print($"✓ Data #{dataSentCount} sent: {Instrument.FullName} @ {Close[0]:F2}");
                     }
                 }
                 else
@@ -216,7 +176,7 @@ namespace NinjaTrader.NinjaScript.Strategies
             catch (HttpRequestException ex)
             {
                 Print($"✗ HTTP Error: {ex.Message}");
-                Print("  → Is the FastAPI server running on " + apiEndpoint + "?");
+                Print($"  → Is FastAPI running at {apiEndpoint}?");
             }
             catch (TaskCanceledException ex)
             {
@@ -224,7 +184,7 @@ namespace NinjaTrader.NinjaScript.Strategies
             }
             catch (Exception ex)
             {
-                Print($"✗ Error sending data to API: {ex.GetType().Name} - {ex.Message}");
+                Print($"✗ Error: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
@@ -243,7 +203,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         [NinjaScriptProperty]
         [Range(1, int.MaxValue)]
-        [Display(Name = "Update Interval (seconds)", Description = "Seconds between data updates", Order = 2, GroupName = "Parameters")]
+        [Display(Name = "Update Interval (seconds)", Description = "Seconds between updates", Order = 2, GroupName = "Parameters")]
         public int UpdateInterval
         {
             get { return updateInterval; }
