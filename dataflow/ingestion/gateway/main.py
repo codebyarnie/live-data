@@ -27,7 +27,7 @@ import uvicorn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from dataflow.adapters.nats_client import NatsClient, NatsConfig, Topics
-from types.market_data import Tick, Candle
+from schemas.market_data import Tick, Candle
 
 # Configure logging
 logging.basicConfig(

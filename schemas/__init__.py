@@ -5,7 +5,7 @@ All events flowing through the system use strongly-typed message schemas.
 This module provides the core data types for market data, indicators, and signals.
 """
 
-from types.market_data import Tick, Candle, Quote
+from schemas.market_data import Tick, Candle, Quote
 
 __all__ = [
     "Tick",
