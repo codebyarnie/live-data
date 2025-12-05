@@ -1,0 +1,114 @@
+version: '3.8'
+
+# Trading Engine - Local Development Stack
+#
+# Services:
+# - nats: Message broker for event streaming
+# - timescaledb: Time-series database for persistence
+# - ingestion-gateway: FastAPI service receiving data from NinjaTrader
+# - candle-aggregator: Aggregates ticks into candles
+# - db-sink: Persists data to TimescaleDB
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d nats timescaledb  # Start infrastructure only
+#   docker-compose logs -f ingestion-gateway  # View logs
+#   docker-compose down                # Stop all services
+
+services:
+  # ============================================================================
+  # Infrastructure
+  # ============================================================================
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: trading-nats
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    command: ["--http_port", "8222", "-js"]  # Enable JetStream
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: trading-timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trading
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./dataflow/persistence/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # Application Services
+  # ============================================================================
+
+  ingestion-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    container_name: trading-ingestion-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_CLIENT_NAME: ingestion-gateway
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  candle-aggregator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.aggregator
+    container_name: trading-candle-aggregator
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_CLIENT_NAME: candle-aggregator
+      TIMEFRAMES: "1m,5m,15m"
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db-sink:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.sink
+    container_name: trading-db-sink
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_CLIENT_NAME: db-sink
+      DATABASE_URL: postgresql://postgres:postgres@timescaledb:5432/trading
+      BATCH_SIZE: "100"
+      FLUSH_INTERVAL: "1.0"
+    depends_on:
+      nats:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  timescaledb_data:
+
+networks:
+  default:
+    name: trading-network

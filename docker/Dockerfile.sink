@@ -1,0 +1,19 @@
+# TimescaleDB Sink Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY dataflow/persistence/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY schemas/ /app/schemas/
+COPY dataflow/adapters/ /app/dataflow/adapters/
+COPY dataflow/persistence/ /app/dataflow/persistence/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run the service
+CMD ["python", "-m", "dataflow.persistence.sink"]

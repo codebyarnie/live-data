@@ -1,0 +1,19 @@
+# Candle Aggregator Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY dataflow/candle_aggregation/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY schemas/ /app/schemas/
+COPY dataflow/adapters/ /app/dataflow/adapters/
+COPY dataflow/candle_aggregation/ /app/dataflow/candle_aggregation/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run the service
+CMD ["python", "-m", "dataflow.candle_aggregation.aggregator"]
