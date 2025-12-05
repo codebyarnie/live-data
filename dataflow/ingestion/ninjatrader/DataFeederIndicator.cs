@@ -144,7 +144,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 {
                     symbol = Instrument.FullName,
                     timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"),  // ← Real-time
-                    bar_time = Time[0].ToString("yyyy-MM-ddTHH:mm:ss"),       // ← Bar reference (optional)
+                    bar_time = Time.GetValueAt(Time.Count-1).ToString("yyyy-MM-ddTHH:mm:ss"),       // ← Bar reference (optional)
                     price = Close[0],
                     volume = Volume[0],
                     bid = GetCurrentBid(),
@@ -166,7 +166,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 {
                     if (dataSentCount <= 3 || dataSentCount % 10 == 0)
                     {
-                        Print($"✓ Data #{dataSentCount} sent: {Instrument.FullName} @ {Close[0]:F2}");
+                        Print($"✓ Data #{dataSentCount} sent: {Instrument.FullName} @ {Close[0]:F2}  {jsonContent.ToString()}");
                     }
                 }
                 else
@@ -213,3 +213,60 @@ namespace NinjaTrader.NinjaScript.Indicators
         #endregion
     }
 }
+
+#region NinjaScript generated code. Neither change nor remove.
+
+namespace NinjaTrader.NinjaScript.Indicators
+{
+	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
+	{
+		private DataFeederIndicator[] cacheDataFeederIndicator;
+		public DataFeederIndicator DataFeederIndicator(string apiEndpoint, int updateInterval)
+		{
+			return DataFeederIndicator(Input, apiEndpoint, updateInterval);
+		}
+
+		public DataFeederIndicator DataFeederIndicator(ISeries<double> input, string apiEndpoint, int updateInterval)
+		{
+			if (cacheDataFeederIndicator != null)
+				for (int idx = 0; idx < cacheDataFeederIndicator.Length; idx++)
+					if (cacheDataFeederIndicator[idx] != null && cacheDataFeederIndicator[idx].ApiEndpoint == apiEndpoint && cacheDataFeederIndicator[idx].UpdateInterval == updateInterval && cacheDataFeederIndicator[idx].EqualsInput(input))
+						return cacheDataFeederIndicator[idx];
+			return CacheIndicator<DataFeederIndicator>(new DataFeederIndicator(){ ApiEndpoint = apiEndpoint, UpdateInterval = updateInterval }, input, ref cacheDataFeederIndicator);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
+{
+	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
+	{
+		public Indicators.DataFeederIndicator DataFeederIndicator(string apiEndpoint, int updateInterval)
+		{
+			return indicator.DataFeederIndicator(Input, apiEndpoint, updateInterval);
+		}
+
+		public Indicators.DataFeederIndicator DataFeederIndicator(ISeries<double> input , string apiEndpoint, int updateInterval)
+		{
+			return indicator.DataFeederIndicator(input, apiEndpoint, updateInterval);
+		}
+	}
+}
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
+	{
+		public Indicators.DataFeederIndicator DataFeederIndicator(string apiEndpoint, int updateInterval)
+		{
+			return indicator.DataFeederIndicator(Input, apiEndpoint, updateInterval);
+		}
+
+		public Indicators.DataFeederIndicator DataFeederIndicator(ISeries<double> input , string apiEndpoint, int updateInterval)
+		{
+			return indicator.DataFeederIndicator(input, apiEndpoint, updateInterval);
+		}
+	}
+}
+
+#endregion

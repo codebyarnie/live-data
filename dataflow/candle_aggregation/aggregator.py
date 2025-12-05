@@ -174,10 +174,13 @@ class CandleAggregator:
 
     async def _handle_tick(self, msg) -> None:
         """Handle incoming tick message"""
+        logger.info(f"Received message on {msg.subject}")  # NEW: Always log receipt
+
         try:
             tick = Tick.from_json(msg.data.decode())
+            logger.info(f"Parsed tick: {tick.symbol} @ {tick.price}")  # NEW: Confirm parsing
         except Exception as e:
-            logger.error(f"Failed to parse tick: {e}")
+            logger.error(f"Failed to parse tick: {e}, raw: {msg.data.decode()[:200]}")
             return
 
         async with self._lock:
@@ -192,6 +195,7 @@ class CandleAggregator:
                     pass
 
                 builder.add_tick(tick)
+                logger.info(f"Added to {timeframe} builder: {tick.symbol}")  # NEW: Confirm addition
 
         logger.debug(f"Processed tick: {tick.symbol} @ {tick.price}")
 
