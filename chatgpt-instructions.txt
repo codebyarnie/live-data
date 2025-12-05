@@ -524,13 +524,71 @@ Observability stack	infra	Ops-managed
 Dashboards/UI	dashboard	Independent lifecycle
 6. Optional Variation (If You Want Maximum Modularity)
 
-If you later grow into multiple teams, you can split indicators into a separate repo:
+1. The DB Sink Is Part of the Engine Layer
 
-Repo 4 — indicators-pack
-But only when you have:
+Your Engine layer contains all deterministic, single-tick–ordered consumers that must process every event exactly once.
+This includes:
 
-100+ indicator modules
+Indicator services
 
-many different teams
+Candle aggregators
 
-For now, keep them in the engine.
+Strategy evaluators
+
+Database sink (tick → candle → indicator → strategy outputs → persistent storage)
+
+Because the DB sink must receive the same ordered, lossless event stream as indicators and strategies, it belongs in the Engine rather than in the UI/API or infrastructure layer.
+
+2. But the DB Sink Should Be Its Own Microservice
+
+Do not embed DB writes into other services.
+
+Reasons:
+
+Clear separation of concerns
+
+Easier schema evolution
+
+Recoverable and replayable (if NATS JetStream is used)
+
+Does not impact latency of indicator computation
+
+Isolated failure domain (DB outage does not break indicators/strategies)
+
+Engine layout (conceptual)
+engine/
+  aggregator-1m/
+  aggregator-5m/
+  indicator-rsi/
+  indicator-delta/
+  indicator-structure/
+  strategy-meanrev/
+  strategy-breakout/
+  sink-db/  <-- here
+
+
+The sink-db subscribes to topics like:
+
+ticks.raw
+candles.1m
+candles.5m
+indicators.*
+strategies.signals
+
+
+and writes to Postgres, ClickHouse, TimescaleDB, or whatever backend you use.
+
+3. Why not place DB sink in the ingestion layer?
+
+Because ingestion is stateless and fire-and-forget.
+Persistence belongs on the deterministic, ordered side where events have been validated.
+
+4. Why not place DB sink in the UI layer?
+
+Because it serves operational data and must keep up with high throughput streams.
+
+Final Recommendation
+
+Place the DB sink inside the Engine, as a dedicated microservice, deployed independently, but fed from the same event streams as indicators and strategies.
+
+If you want, I can update the README.md in the canvas to explicitly include the DB sink component and its responsibilities.
