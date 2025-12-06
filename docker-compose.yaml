@@ -106,6 +106,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  query-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.query
+    container_name: trading-query-api
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@timescaledb:5432/trading
+      HOST: "0.0.0.0"
+      PORT: "8001"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   timescaledb_data:
 

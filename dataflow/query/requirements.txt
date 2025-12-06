@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+pydantic
+asyncpg==0.29.0

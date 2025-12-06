@@ -24,6 +24,7 @@ help:
 	@echo "  make gateway      Run ingestion gateway locally"
 	@echo "  make aggregator   Run candle aggregator locally"
 	@echo "  make sink         Run DB sink locally"
+	@echo "  make query        Run query API locally"
 	@echo ""
 	@echo "  make init-db      Initialize TimescaleDB schema"
 	@echo "  make nats-monitor Open NATS monitoring UI"
@@ -63,6 +64,9 @@ logs-aggregator:
 logs-sink:
 	docker-compose logs -f db-sink
 
+logs-query:
+	docker-compose logs -f query-api
+
 # Run services locally (for development)
 gateway:
 	PYTHONPATH=. python -m dataflow.ingestion.gateway.main
@@ -72,6 +76,9 @@ aggregator:
 
 sink:
 	PYTHONPATH=. python -m dataflow.persistence.sink
+
+query:
+	PYTHONPATH=. python -m dataflow.query.api.main
 
 # Initialize database
 init-db:
