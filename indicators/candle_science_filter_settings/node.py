@@ -1,5 +1,5 @@
 """
-Filter Settings DAG Node
+CandleScience Filter Settings DAG Node
 
 Implements filter settings indicator as a DAG node.
 Processes candle data to calculate direction and position filters.
@@ -15,9 +15,9 @@ from dataflow.indicators.filter_settings.filters import FilterCalculator
 logger = logging.getLogger(__name__)
 
 
-class FilterSettingsNode:
+class CandleScienceFilterSettingsNode:
     """
-    Filter settings indicator as a DAG node.
+    CandleScience Filter settings indicator as a DAG node.
 
     Maintains a rolling buffer of N candles and calculates filters
     based on candle patterns.
@@ -40,7 +40,7 @@ class FilterSettingsNode:
         self.buffer_size = buffer_size
 
         logger.info(
-            f"Initialized FilterSettingsNode '{node_id}' "
+            f"Initialized CandleScienceFilterSettingsNode '{node_id}' "
             f"with buffer_size={buffer_size}"
         )
 
@@ -134,9 +134,9 @@ class FilterSettingsNode:
             return {}
 
 
-def create_filter_settings_node(node_def):
+def create_candle_science_filter_settings_node(node_def):
     """
-    Factory function for creating FilterSettingsNode instances.
+    Factory function for creating CandleScience FilterSettingsNode instances.
 
     This function is registered with the NodeRegistry and is called
     to create node instances from NodeDef specifications.
@@ -145,9 +145,9 @@ def create_filter_settings_node(node_def):
         node_def: NodeDef with id, type, params, inputs, outputs
 
     Returns:
-        FilterSettingsNode instance
+        CandleScienceFilterSettingsNode instance
     """
-    return FilterSettingsNode(
+    return CandleScienceFilterSettingsNode(
         node_id=node_def.id,
         buffer_size=node_def.params.get("buffer_size", 3)
     )

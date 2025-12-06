@@ -4,13 +4,13 @@
 # The filter_settings indicator is a starting point that will be migrated
 # from the existing standalone implementation.
 
-symbol: ES
+symbol: NQ
 
 indicators:
   # Filter Settings Indicator
   # Analyzes candle patterns and produces direction/position filters
-  - id: filter_settings
-    type: FilterSettings
+  - id: candle_science_filter_settings
+    type: CandleScienceFilterSettings
     params:
       buffer_size: 3
     inputs:

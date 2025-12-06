@@ -122,14 +122,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  filter-settings:
+  candle_science_filter-settings:
     build:
       context: .
-      dockerfile: docker/Dockerfile.filter-settings
+      dockerfile: docker/Dockerfile.candle-science-filter-settings
     container_name: trading-filter-settings
     environment:
       NATS_SERVERS: nats://nats:4222
-      NATS_CLIENT_NAME: filter-settings
+      NATS_CLIENT_NAME: candle-science-filter-settings
       DATABASE_URL: postgresql://postgres:postgres@timescaledb:5432/trading
       INDICATOR_PAIRS: "NQ DEC25:5m"
       BUFFER_SIZE: "3"

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 from schemas.market_data import Candle
 
 
-class FilterCalculator:
+class CandleScienceFilterCalculator:
     """
     Calculates direction and position filters from candle data.
 
@@ -57,7 +57,7 @@ class FilterCalculator:
         for idx, candle in enumerate(candles):
             candle_num = idx + 1
             direction_key = f'C{candle_num}_body_direction'
-            direction = FilterCalculator.analyze_direction(candle)
+            direction = CandleScienceFilterCalculator.analyze_direction(candle)
             filters[direction_key] = direction
 
         return filters
@@ -91,8 +91,8 @@ class FilterCalculator:
 
             candle_num = idx + 2  # C2, C3, C4, etc.
 
-            c1_direction = FilterCalculator.analyze_direction(c1)
-            c2_direction = FilterCalculator.analyze_direction(c2)
+            c1_direction = CandleScienceFilterCalculator.analyze_direction(c1)
+            c2_direction = CandleScienceFilterCalculator.analyze_direction(c2)
 
             # Get C1 body boundaries
             if c1_direction == 'Bullish':
@@ -201,8 +201,8 @@ class FilterCalculator:
         Returns:
             Dictionary with all filters
         """
-        direction_filters = FilterCalculator.build_direction_filters(candles)
-        position_filters = FilterCalculator.build_position_filters(candles)
+        direction_filters = CandleScienceFilterCalculator.build_direction_filters(candles)
+        position_filters = CandleScienceFilterCalculator.build_position_filters(candles)
 
         # Merge both dictionaries
         return {**direction_filters, **position_filters}

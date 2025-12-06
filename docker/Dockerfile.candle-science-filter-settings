@@ -4,13 +4,13 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install dependencies
-COPY dataflow/indicators/filter_settings/requirements.txt /app/requirements.txt
+COPY dataflow/indicators/candle_science_filter_settings/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY schemas/ /app/schemas/
 COPY dataflow/adapters/ /app/dataflow/adapters/
-COPY dataflow/indicators/filter_settings/ /app/dataflow/indicators/filter_settings/
+COPY dataflow/indicators/candle_science_filter_settings/ /app/dataflow/indicators/candle_science_filter_settings/
 COPY dataflow/indicators/__init__.py /app/dataflow/indicators/__init__.py
 COPY dataflow/__init__.py /app/dataflow/__init__.py
 
@@ -18,4 +18,4 @@ COPY dataflow/__init__.py /app/dataflow/__init__.py
 ENV PYTHONPATH=/app
 
 # Run the service
-CMD ["python", "-m", "dataflow.indicators.filter_settings.indicator"]
+CMD ["python", "-m", "dataflow.indicators.candle_science_filter_settings.indicator"]

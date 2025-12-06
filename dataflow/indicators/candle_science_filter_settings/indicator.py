@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 from dataflow.adapters.nats_client import NatsClient, NatsConfig, Topics
 from schemas.market_data import Candle
 from schemas.indicator_data import FilterSettings
-from dataflow.indicators.filter_settings.filters import FilterCalculator
+from dataflow.indicators.candle_science_filter_settings.filters import CandleScienceFilterCalculator
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class FilterSettingsIndicator:
+class CandleScienceFilterSettingsIndicator:
     """
     Filter Settings Indicator Service.
 
@@ -213,7 +213,7 @@ class FilterSettingsIndicator:
         """
         try:
             # Use FilterCalculator to build filters
-            filters = FilterCalculator.build_all_filters(candles)
+            filters = CandleScienceFilterCalculator.build_all_filters(candles)
 
             if filters:
                 logger.debug(
@@ -367,7 +367,7 @@ async def main():
     # Create indicator instances for each pair
     indicators = []
     for symbol, timeframe in pairs:
-        indicator = FilterSettingsIndicator(
+        indicator = CandleScienceFilterSettingsIndicator(
             nats_client=nats_client,
             db_pool=db_pool,
             symbol=symbol,
