@@ -238,7 +238,7 @@ async def main():
     config = NatsConfig.from_env()
     nats_client = NatsClient(config)
     timeframes = os.getenv("TIMEFRAMES", "1m,5m,15m").split(",")
-    aggregator = CandleAggregator(nats_client, timeframes)
+    aggregator = CandleAggregator(nats_client, TIMEFRAMES.keys())
 
     try:
         await nats_client.connect()
