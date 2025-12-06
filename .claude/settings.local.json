@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp list:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(set:*)",
+      "Bash(set BUFFER_SIZE=3)",
+      "Bash(set NATS_SERVERS=nats://localhost:4222)",
+      "Bash(set DATABASE_URL=postgresql://postgres:postgres@localhost:5432/trading:*)",
+      "Bash(powershell -Command \"$env:INDICATOR_PAIRS=''NQ DEC25:5m''; $env:BUFFER_SIZE=''3''; $env:NATS_SERVERS=''nats://localhost:4222''; $env:DATABASE_URL=''postgresql://postgres:postgres@localhost:5432/trading''; $env:PYTHONPATH=''.''; python -m dataflow.indicators.filter_settings.indicator\")",
+      "Bash(docker-compose build:*)",
+      "Bash(docker exec:*)",
+      "Bash(find:*)",
+      "Bash(python -m engine.runtime.main:*)",
+      "Bash(pip install:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(timeout /t 3)",
+      "Bash(findstr:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

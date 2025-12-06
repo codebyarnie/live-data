@@ -1,0 +1,37 @@
+# ES Symbol - Indicator Pipeline Configuration
+#
+# This file defines the indicators for ES symbol.
+# The filter_settings indicator is a starting point that will be migrated
+# from the existing standalone implementation.
+
+symbol: ES
+
+indicators:
+  # Filter Settings Indicator
+  # Analyzes candle patterns and produces direction/position filters
+  - id: filter_settings
+    type: FilterSettings
+    params:
+      buffer_size: 3
+    inputs:
+      - type: candle
+        source: 1m  # Using 1m for testing (change to 5m in production)
+
+  # TODO: Add more indicators as they are implemented
+  # Examples:
+  #
+  # - id: ema_20
+  #   type: EMA
+  #   params:
+  #     length: 20
+  #   inputs:
+  #     - type: candle
+  #       source: 1m
+  #
+  # - id: swing_points
+  #   type: SwingPoints
+  #   params:
+  #     lookback: 10
+  #   inputs:
+  #     - type: candle
+  #       source: 5m

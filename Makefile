@@ -21,10 +21,11 @@ help:
 	@echo "  make test         Run tests"
 	@echo "  make clean        Clean up containers and volumes"
 	@echo ""
-	@echo "  make gateway      Run ingestion gateway locally"
-	@echo "  make aggregator   Run candle aggregator locally"
-	@echo "  make sink         Run DB sink locally"
-	@echo "  make query        Run query API locally"
+	@echo "  make gateway           Run ingestion gateway locally"
+	@echo "  make aggregator        Run candle aggregator locally"
+	@echo "  make sink              Run DB sink locally"
+	@echo "  make query             Run query API locally"
+	@echo "  make filter-settings   Run filter settings indicator locally"
 	@echo ""
 	@echo "  make init-db      Initialize TimescaleDB schema"
 	@echo "  make nats-monitor Open NATS monitoring UI"
@@ -67,6 +68,9 @@ logs-sink:
 logs-query:
 	docker-compose logs -f query-api
 
+logs-filter-settings:
+	docker-compose logs -f filter-settings
+
 # Run services locally (for development)
 gateway:
 	PYTHONPATH=. python -m dataflow.ingestion.gateway.main
@@ -79,6 +83,9 @@ sink:
 
 query:
 	PYTHONPATH=. python -m dataflow.query.api.main
+
+filter-settings:
+	PYTHONPATH=. python -m dataflow.indicators.filter_settings.indicator
 
 # Initialize database
 init-db:

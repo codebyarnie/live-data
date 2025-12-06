@@ -1,0 +1,169 @@
+# Schema for Pipeline Configuration
+#
+# This file documents the structure of YAML pipeline configuration files.
+# Pipeline configs define indicators and strategies for a specific symbol.
+
+# Top-level structure
+pipeline_schema:
+  # Symbol this pipeline is for (required)
+  symbol: string  # Example: "ES", "NQ", "NQ DEC25"
+
+  # List of indicators (optional)
+  indicators:
+    - id: string  # Unique identifier (required)
+      type: string  # Node type (required, e.g., "EMA", "VWAP", "FilterSettings")
+      params: object  # Indicator-specific parameters (optional)
+      inputs: list  # List of input references (required)
+
+  # List of strategies (optional)
+  strategies:
+    - id: string  # Unique identifier (required)
+      type: string  # Strategy type (required, e.g., "LiquidityBreakout")
+      params: object  # Strategy-specific parameters (optional)
+      depends_on: list[string]  # Indicator IDs this strategy depends on (required)
+
+# Input reference structure
+input_schema:
+  type: enum  # Input type: "tick", "candle", or "indicator" (required)
+  source: string  # Source identifier (required)
+    # For type="candle": timeframe (e.g., "1m", "5m", "15m")
+    # For type="indicator": indicator id (e.g., "ema_20")
+    # For type="tick": not used
+  field: string  # Field name for multi-output indicators (optional)
+    # Example: "upper", "lower", "poc"
+
+# Example: Single Indicator
+# File: config/pipelines/ES/indicators.yaml
+#
+# symbol: ES
+#
+# indicators:
+#   - id: ema_20
+#     type: EMA
+#     params:
+#       length: 20
+#     inputs:
+#       - type: candle
+#         source: 1m
+#         field: close
+
+# Example: Multiple Indicators
+# File: config/pipelines/ES/indicators.yaml
+#
+# symbol: ES
+#
+# indicators:
+#   - id: ema_20
+#     type: EMA
+#     params:
+#       length: 20
+#     inputs:
+#       - type: candle
+#         source: 1m
+#
+#   - id: ema_50
+#     type: EMA
+#     params:
+#       length: 50
+#     inputs:
+#       - type: candle
+#         source: 1m
+#
+#   - id: swing_points
+#     type: SwingPoints
+#     params:
+#       lookback: 10
+#     inputs:
+#       - type: candle
+#         source: 5m
+#
+#   - id: filter_settings
+#     type: FilterSettings
+#     params:
+#       buffer_size: 3
+#     inputs:
+#       - type: candle
+#         source: 5m
+
+# Example: Strategy Depending on Indicators
+# File: config/pipelines/ES/strat_breakout.yaml
+#
+# symbol: ES
+#
+# strategies:
+#   - id: breakout_liquidity
+#     type: LiquidityBreakout
+#     params:
+#       risk_multiple: 2.0
+#     depends_on:
+#       - ema_20
+#       - swing_points
+#       - filter_settings
+
+# Example: Composite Indicator (depends on other indicators)
+# File: config/pipelines/ES/indicators.yaml
+#
+# symbol: ES
+#
+# indicators:
+#   - id: ema_20
+#     type: EMA
+#     params:
+#       length: 20
+#     inputs:
+#       - type: candle
+#         source: 1m
+#
+#   - id: ema_50
+#     type: EMA
+#     params:
+#       length: 50
+#     inputs:
+#       - type: candle
+#         source: 1m
+#
+#   - id: ema_crossover
+#     type: Crossover
+#     params: {}
+#     inputs:
+#       - type: indicator
+#         source: ema_20
+#       - type: indicator
+#         source: ema_50
+
+# Example: Multi-output Indicator with Field Selection
+# File: config/pipelines/ES/indicators.yaml
+#
+# symbol: ES
+#
+# indicators:
+#   - id: bollinger
+#     type: BollingerBands
+#     params:
+#       length: 20
+#       std_dev: 2.0
+#     inputs:
+#       - type: candle
+#         source: 1m
+#
+#   - id: bb_breakout
+#     type: BBBreakout
+#     params: {}
+#     inputs:
+#       - type: candle
+#         source: 1m
+#       - type: indicator
+#         source: bollinger
+#         field: upper
+#       - type: indicator
+#         source: bollinger
+#         field: lower
+
+# Validation Rules:
+# 1. Indicator IDs must be unique within a symbol
+# 2. Strategy IDs must be unique within a symbol
+# 3. Indicators can only depend on other indicators (via inputs)
+# 4. Strategies can depend on indicators (via depends_on)
+# 5. No circular dependencies allowed
+# 6. Referenced indicators must exist in one of the loaded config files
+# 7. Symbol must match across all config files for a symbol directory

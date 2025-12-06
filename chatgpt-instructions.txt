@@ -1,3 +1,693 @@
+Below is the clean, formal clarification of how this should work in your architecture.
+
+---
+
+# 1. Candle Aggregator: Static, Code-Defined
+
+Yes — the candle aggregator **should be statically coded** for the set of supported timeframes, not configured via YAML.
+
+### Why?
+
+1. **Cross-timeframe candle aggregation is deterministic math**, not user-configurable strategy logic.
+2. Aggregators must be fast, predictable, and optimized.
+3. YAML configuration introduces risk: mismatched TFs, unsupported TF cascades, or execution-order inconsistencies.
+
+### Typical model
+
+Hard-coded in code:
+
+```python
+SUPPORTED_TFS = ["1m", "5m", "15m", "1h"]
+```
+
+Individual aggregator workers:
+
+* 1m → emits 1m and triggers 5m combiner
+* 5m → emits 5m and triggers 15m combiner
+* 15m → emits 15m and triggers 1h combiner
+
+### Why this is correct
+
+This is an **infrastructure concern**, not a trading logic concern.
+It belongs to the *dataflow layer*, not the *strategy logic layer*.
+
+---
+
+# 2. Strategy and Indicator DAG: YAML-Configured
+
+Correct — *strategies and indicators*, and the full DAG pipeline per symbol, **must be configured via YAML**.
+
+This includes:
+
+* which indicators exist
+* their parameters
+* which strategies exist
+* their dependencies
+* multi-TF usage
+* node names
+* outputs
+* risk parameters
+
+### Example (symbol pipeline YAML)
+
+```yaml
+symbol: ES
+pipeline:
+  - id: ema_fast
+    type: EMA
+    params:
+      length: 20
+      tf: 1m
+
+  - id: ema_slow
+    type: EMA
+    params:
+      length: 50
+      tf: 1m
+    depends_on:
+      - ema_fast
+
+  - id: swing_structure
+    type: SwingPoints
+    params:
+      tf: 5m
+    depends_on:
+      - candles_5m
+
+  - id: breakout_strategy
+    type: LiquidityBreakout
+    params:
+      risk_multiple: 2.0
+    depends_on:
+      - ema_slow
+      - swing_structure
+```
+
+This declarative definition is correct because:
+
+* strategies/indicators are part of *trading logic*
+* trading logic changes often
+* you must be able to backtest different DAG layouts
+* you must support per-symbol variations
+
+The DAG runtime loads YAML configs → constructs the DAG → enforces topological order.
+
+---
+
+# 3. Summary
+
+### **Candle Aggregator**
+
+* Hardcoded
+* Not YAML-configured
+* Part of infrastructure
+* Deterministic time-series math
+* Runs the same for all symbols
+
+### **Strategies / Indicators**
+
+* YAML-configured
+* Per-symbol or global configs
+* Dynamic, user-editable
+* Used to construct DAGs
+* Changes do not require code deployment
+
+This division is clean and correct.
+
+---
+
+If you want, I can provide a full `aggregator_1m.py` → `aggregator_5m.py` → `aggregator_15m.py` → `aggregator_1h.py` chain design, or a fully-expressed YAML schema for strategy/indicator nodes.
+
+Yes — you **can and should** support multiple strategies in separate YAML files for the same instrument **while reusing indicator nodes across all strategies**.
+This is both feasible and architecturally correct *if* you structure the DAG loader appropriately.
+
+Below is the formal explanation of how to do it cleanly.
+
+---
+
+# 1. Core Principle
+
+Indicators are **pure computational nodes**.
+Strategies are **terminal nodes** that consume indicator outputs.
+
+You can load any number of strategy YAML files that reference the same indicator IDs, and the DAG engine will naturally deduplicate indicator nodes.
+
+### Example
+
+* `es/base_indicators.yaml`
+* `es/strategy_breakout.yaml`
+* `es/strategy_reversion.yaml`
+
+Both strategies can reference the same indicators:
+
+```yaml
+depends_on:
+  - ema_20
+  - ema_50
+  - swing_points
+```
+
+The DAG engine will create:
+
+* one `ema_20`,
+* one `ema_50`,
+* one `swing_points`,
+* two strategy nodes.
+
+All five nodes appear in the same DAG, but redundancy is eliminated.
+
+---
+
+# 2. How to Implement Indicator Reuse Formally
+
+You need a **two-stage DAG build process**:
+
+### Stage 1: Load and Normalize All YAML Files
+
+Per instrument:
+
+1. Read all YAML files in:
+   `config/pipelines/ES/*.yaml`
+2. Merge them into a single in-memory set of node definitions.
+3. Validate uniqueness of node IDs.
+
+### Stage 2: Deduplicate Node Definitions
+
+Deduplication rule:
+
+```
+node_id is the unique identifier globally per instrument.
+```
+
+If another YAML defines a node with the same `id`, you:
+
+* merge parameters if identical, or
+* reject the configuration if conflicting.
+
+This prevents multiple definitions of the same indicator with different params.
+
+---
+
+# 3. Example Directory Structure
+
+```
+config/
+  pipelines/
+    ES/
+      indicators.yaml            # All shared indicator definitions
+      strat_breakout.yaml        # Strategy DAG #1
+      strat_mean_reversion.yaml  # Strategy DAG #2
+      strat_liquidity.yaml       # Strategy DAG #3
+```
+
+### Example `indicators.yaml`
+
+```yaml
+indicators:
+  - id: ema_20
+    type: EMA
+    params: { length: 20, tf: 1m }
+
+  - id: ema_50
+    type: EMA
+    params: { length: 50, tf: 1m }
+
+  - id: swing_points
+    type: SwingPoints
+    params: { tf: 5m }
+```
+
+### Example `strat_breakout.yaml`
+
+```yaml
+strategies:
+  - id: breakout_liquidity
+    type: LiquidityBreakout
+    depends_on:
+      - ema_20
+      - swing_points
+```
+
+### Example `strat_reversion.yaml`
+
+```yaml
+strategies:
+  - id: reversion_avg
+    type: MeanReversion
+    depends_on:
+      - ema_20
+      - ema_50
+```
+
+The DAG loader will produce:
+
+* 3 indicator nodes
+* 2 strategy nodes
+* Single unified DAG → stable → topologically sorted
+
+---
+
+# 4. How the DAG Executor Benefits
+
+### 1. Only one computation per indicator per event
+
+Even if 10 strategies depend on `ema_20`, the DAG ensures:
+
+* `ema_20` executes once
+* all strategies consume its output
+
+### 2. Lower resource usage
+
+CPU cost stays low since indicators are the dominant load.
+
+### 3. High composability
+
+You can enable or disable strategies simply by adding/removing YAML files.
+
+---
+
+# 5. Mandatory Constraints (to avoid misconfiguration)
+
+1. **Node IDs must be globally unique per symbol**
+2. **Indicator nodes must not be redefined with different parameters**
+3. **Strategies may depend on shared indicators but may not define their own duplicate indicators**
+4. **DAG loader must reject cycles across files**
+5. **All YAML files must contribute to a single DAG**
+
+These rules maintain determinism.
+
+---
+
+# 6. Final Answer
+
+**Yes, you can define multiple strategies in separate YAML files for the same instrument, and they can all reuse the same indicators.**
+The DAG engine will merge the configurations, deduplicate indicators, and compute them once.
+
+This is a correct and recommended architecture.
+
+If you want, I can generate:
+
+* the full YAML schema for multi-file DAG composition
+* a reference DAG loader implementation outline
+* example multi-strategy pipeline for ES/NQ
+* validation rules for consistent reuse of nodes
+
+Yes, it is entirely possible **if you design the architecture correctly**, but it requires a clear separation between:
+
+1. **Indicator engines (per instrument)**
+2. **Cross-instrument consumption layer (strategies)**
+
+Below is the exact breakdown.
+
+---
+
+# 1. Indicators can belong to any instrument
+
+Your indicator engine (or “candle engine + indicator engine”) naturally runs **per instrument**, because:
+
+* OHLCV is per instrument
+* Orderflow is per instrument
+* Many indicators are mathematically meaningful only per instrument
+
+So each instrument has its own indicator namespace, e.g.:
+
+```
+/indicators/ES
+/indicators/NQ
+/indicators/CL
+```
+
+Each namespace produces outputs into a sink (DB or stream), for example:
+
+```
+indicator_output:
+  instrument: ES
+  indicator: vwap
+  value: ...
+  timestamp: ...
+```
+
+---
+
+# 2. Strategies can consume indicators across instruments
+
+Strategies are **consumers**, not producers.
+
+A strategy config can reference indicators from:
+
+* its own instrument
+* any other instrument
+* even synthetic instruments (spreads, custom tickers, etc.)
+
+Example YAML:
+
+```yaml
+strategy:
+  name: "ES_spread_confirmation"
+  instrument: ES
+
+  inputs:
+    es_vwap: indicators.ES.vwap
+    nq_vwap: indicators.NQ.vwap
+    es_delta: indicators.ES.delta
+    nq_delta: indicators.NQ.delta
+```
+
+This means:
+
+* The ES strategy listens to the ES indicator topics
+* But ALSO subscribes to NQ indicator topics
+* And uses them as features for signals
+
+This is what hedge funds call **cross-asset feature loading** or **multi-asset factor ingestion**.
+
+---
+
+# 3. Technical requirement: indicators must be published to a shared transport
+
+For this to work:
+
+Most architectures use Kafka/NATS/Redis streams etc. to make the indicators available across instruments. Example:
+
+```
+indicators.ES.*
+indicators.NQ.*
+indicators.CL.*
+```
+
+Your strategy agent simply subscribes to the streams it needs.
+
+---
+
+# 4. Why it works cleanly
+
+Because:
+
+* The **indicator engines** remain fully instrument-isolated and stateless
+* The **strategy engine** remains fully configurable and instrument-agnostic
+* There is zero duplication of indicator calculations
+* Latency is extremely low if you use structured streams
+
+This is the preferred architecture in production quant systems.
+
+---
+
+# 5. Summary
+
+**Yes**, you can absolutely consume indicators from different instruments in a strategy, as long as your indicator engines publish to a central transport and your strategy agent supports cross-topic subscription.
+
+If you want, I can produce:
+
+* The exact directory/repository structure
+* Example full YAMLs
+* Messaging topics layout (Kafka/NATS)
+* How the strategy engine links the multi-instrument features
+
+Just tell me.
+Yes—an *indicator can absolutely consume several other indicators*.
+And **it should still be called an indicator**, as long as it complies with the same semantics:
+
+* It receives time-aligned inputs
+* It produces a deterministic output
+* It does not execute trading logic
+* It is pure transformation, not a decision unit
+
+This pattern is standard in quant systems and is usually called:
+
+* **Composite indicators**
+* **Derived indicators**
+* **Feature transforms**
+* **Meta-indicators**
+* **Indicator chains**
+
+All are legitimate “indicators” within the architecture.
+
+Below is the precise classification.
+
+---
+
+# 1. Atomic vs Composite Indicators
+
+### Atomic Indicator
+
+Calculates directly from raw data (price, volume, orderflow, etc.)
+Examples:
+
+* EMA(20)
+* VWAP
+* Imbalance
+* Delta
+
+### Composite Indicator
+
+Consumes one or more indicators as input.
+Examples:
+
+* EMA-of-VWAP
+* Normalized Delta = Delta / VWAP deviation
+* Relative Strength = EMA(close) / EMA(volume)
+* Multi-TF Confirmation = HTF-EMA aligned with LTF-EMA
+
+Architecturally, composite indicators are **still indicators**, not strategies.
+
+---
+
+# 2. Why they stay indicators (not strategies)
+
+A strategy is defined by:
+
+* It issues **signals**: buy/sell/flat
+* It applies **logic**, thresholds, conditions
+* It makes **decisions**
+
+A composite indicator is defined by:
+
+* It outputs **a numeric or categorical data series**
+* It remains stateless except for its own calculation state
+* It does not decide anything
+
+So even if it combines 10 other indicators, as long as it only outputs features, it remains an indicator.
+
+---
+
+# 3. How it works in your architecture (clean design)
+
+Your YAML could look like:
+
+```yaml
+indicators:
+  ema20:
+    type: ema
+    input: candle.close
+    period: 20
+
+  vwap:
+    type: vwap
+    input: candle
+
+  normalized_delta:
+    type: formula
+    inputs:
+      delta: indicators.delta
+      vwap: indicators.vwap
+    expression: "delta / (vwap + 1e-9)"
+
+  trend_strength:
+    type: composite
+    inputs:
+      ema20: indicators.ema20
+      ema50: indicators.ema50
+    algorithm: trend_strength
+```
+
+This structure supports:
+
+* Chaining
+* Dependency resolution
+* Multi-indicator ingestion
+* Clean separation between feature generation and signal logic
+
+---
+
+# 4. Naming Recommendation
+
+Use these categories:
+
+### 1) Indicator
+
+* Raw or derived
+* Single or multi-input
+* Numeric output
+
+### 2) Feature
+
+* A semantic name for a transformed indicator
+* Could be identical to “indicator”
+
+### 3) Strategy
+
+* Consumes features/indicators
+* Produces signals
+
+You do *not* need another name unless you want to distinguish mathematically complex transforms, but in trading systems it is standard that "indicator" covers the whole hierarchy.
+
+---
+
+# 5. Summary
+
+**Yes:** an indicator can take any number of indicators as input.
+**No:** you do not need a different name.
+**Call it a composite indicator or simply an indicator.**
+
+If you want, I can show:
+
+* How to structure composite indicator dependencies in YAML
+* How to resolve dependency graphs
+* How to deploy this on K3s with minimal coupling
+
+Just tell me.
+
+Yes, **an indicator can have several outputs**, and in a well-designed system this is not only allowed but often desirable. It simply means the indicator is producing a **vector feature** instead of a scalar feature.
+
+This is standard in quantitative trading systems.
+
+Below is the formal breakdown.
+
+---
+
+# 1. Multi-output indicators are normal
+
+Examples:
+
+### 1) Bollinger Bands
+
+Outputs:
+
+* upper_band
+* middle_band
+* lower_band
+
+### 2) Market Profile
+
+Outputs:
+
+* poc
+* value_area_high
+* value_area_low
+* distribution histogram
+
+### 3) Orderflow analysis
+
+Outputs:
+
+* delta
+* cumulative_delta
+* aggressor_ratio
+* bid_volume
+* ask_volume
+
+### 4) Regression-based indicators
+
+Outputs:
+
+* slope
+* intercept
+* residual
+* r_squared
+
+All of these are **multiple outputs from a single transformation unit**, and they are still indicators.
+
+---
+
+# 2. How to model multi-output indicators
+
+### Option A — One indicator object with multiple named fields
+
+This is the cleanest design.
+
+Example YAML:
+
+```yaml
+indicators:
+  market_profile:
+    type: tpo
+    input: candles
+    parameters:
+      session: RTH
+```
+
+Output is a structured result:
+
+```
+market_profile.poc
+market_profile.value_high
+market_profile.value_low
+```
+
+### Option B — Auto-split into separate indicator streams
+
+Some pipelines prefer splitting outputs into flat streams:
+
+```
+indicator.market_profile.poc
+indicator.market_profile.value_high
+indicator.market_profile.value_low
+```
+
+This is useful for streaming systems (Kafka/NATS).
+
+---
+
+# 3. Why multi-output indicators are valuable
+
+1. **Avoid recomputation**
+   You do Market Profile once; do not compute POC three times.
+
+2. **Logical cohesion**
+   Outputs belong together and share the same computational context.
+
+3. **Faster dataflow**
+   Composite indicators or strategies can subscribe to only the fields they need.
+
+4. **Cleaner dependency graph**
+   You avoid bloating your config with unnecessary “fake” atomic indicators.
+
+---
+
+# 4. How strategies consume multi-output indicators
+
+Example strategy config:
+
+```yaml
+strategy:
+  name: "MP confirmation"
+  instrument: ES
+
+  inputs:
+    poc: indicators.market_profile.poc
+    vah: indicators.market_profile.value_high
+    val: indicators.market_profile.value_low
+    ema20: indicators.ema20
+```
+
+This is clean and scalable.
+
+---
+
+# 5. Summary
+
+**Yes — an indicator can absolutely have multiple outputs.**
+In fact, this is common and recommended for complex transforms.
+Architecturally, you treat it as a **multi-field feature generator**.
+
+If you want, I can show:
+
+* The cleanest way to encode multi-output indicators in your YAML
+* How to stream multi-output indicators over Kafka/NATS
+* How to manage dependency resolution for multi-output indicators
+
+Tell me what level you want.
+
 1. Core Concept
 
 The system is a Directed Acyclic Graph (DAG) of nodes.

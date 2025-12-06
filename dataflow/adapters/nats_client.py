@@ -188,29 +188,45 @@ class Topics:
     """NATS topic name builders"""
 
     @staticmethod
+    def _sanitize(name: str) -> str:
+        """
+        Sanitize a name for use in NATS topics.
+
+        NATS topic segments can only contain alphanumeric characters,
+        hyphens, and underscores. Spaces and other characters are
+        replaced with underscores.
+        """
+        # Replace spaces with underscores
+        # Replace any other invalid characters with underscores
+        sanitized = name.replace(" ", "_")
+        # Keep only alphanumeric, hyphens, underscores
+        sanitized = "".join(c if c.isalnum() or c in "-_" else "_" for c in sanitized)
+        return sanitized
+
+    @staticmethod
     def ticks_raw(symbol: str) -> str:
         """Raw tick topic for a symbol"""
-        return f"ticks.raw.{symbol}"
+        return f"ticks.raw.{Topics._sanitize(symbol)}"
 
     @staticmethod
     def candles(symbol: str, timeframe: str) -> str:
         """Candle topic for a symbol and timeframe"""
-        return f"candles.{symbol}.{timeframe}"
+        return f"candles.{Topics._sanitize(symbol)}.{timeframe}"
 
     @staticmethod
     def candles_all(symbol: str) -> str:
         """All candle timeframes for a symbol (wildcard)"""
-        return f"candles.{symbol}.*"
+        return f"candles.{Topics._sanitize(symbol)}.*"
 
     @staticmethod
     def indicators(symbol: str, indicator_id: str) -> str:
         """Indicator output topic"""
-        return f"indicators.{symbol}.{indicator_id}"
+        return f"indicators.{Topics._sanitize(symbol)}.{indicator_id}"
 
     @staticmethod
     def strategy_signals(symbol: str) -> str:
         """Strategy signals topic"""
-        return f"strategies.signals.{symbol}"
+        return f"strategies.signals.{Topics._sanitize(symbol)}"
 
     @staticmethod
     def all_ticks() -> str:
